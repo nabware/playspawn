@@ -1,8 +1,9 @@
 use ash::ext::debug_utils;
 use ash::khr::{surface, wayland_surface};
 use ash::vk::{self, make_api_version};
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
+use std::os::raw::c_char;
 use std::ptr;
 
 use winit::{
@@ -14,6 +15,11 @@ use winit::{
 const APP_NAME: &'static str = "Playspawn";
 const APP_VERSION: u32 = make_api_version(0, 1, 0, 0);
 const VULKAN_VERSION: u32 = make_api_version(0, 1, 3, 0);
+#[cfg(not(debug_assertions))]
+const ENABLE_VALIDATION_LAYERS: bool = false;
+#[cfg(debug_assertions)]
+const ENABLE_VALIDATION_LAYERS: bool = true;
+const REQUIRED_VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 
 struct VulkanApp {
     _entry: ash::Entry,
@@ -22,6 +28,14 @@ struct VulkanApp {
 
 impl VulkanApp {
     pub fn new() -> VulkanApp {
+        let entry = unsafe { ash::Entry::load().unwrap() };
+
+        if ENABLE_VALIDATION_LAYERS
+            && VulkanApp::check_validation_layer_support(&entry) == false
+        {
+            panic!("Validation layers requested, but not available!");
+        }
+
         let app_name = CString::new(APP_NAME).unwrap();
         let engine_name = CString::new(format!("{APP_NAME} Engine")).unwrap();
 
@@ -42,19 +56,37 @@ impl VulkanApp {
             debug_utils::NAME.as_ptr(),
         ];
 
+        let required_validation_layer_raw_names: Vec<CString> =
+            REQUIRED_VALIDATION_LAYERS
+                .iter()
+                .map(|layer_name| CString::new(*layer_name).unwrap())
+                .collect();
+        let enable_layer_names: Vec<*const i8> =
+            required_validation_layer_raw_names
+                .iter()
+                .map(|layer_name| layer_name.as_ptr())
+                .collect();
+
         let create_info = vk::InstanceCreateInfo {
             s_type: vk::StructureType::INSTANCE_CREATE_INFO,
             p_next: ptr::null(),
             flags: vk::InstanceCreateFlags::empty(),
             p_application_info: &app_info,
-            pp_enabled_layer_names: ptr::null(),
-            enabled_layer_count: 0,
+            pp_enabled_layer_names: if ENABLE_VALIDATION_LAYERS {
+                enable_layer_names.as_ptr()
+            } else {
+                ptr::null()
+            },
+            enabled_layer_count: if ENABLE_VALIDATION_LAYERS {
+                enable_layer_names.len()
+            } else {
+                0
+            } as u32,
             pp_enabled_extension_names: extension_names.as_ptr(),
             enabled_extension_count: extension_names.len() as u32,
             _marker: PhantomData,
         };
 
-        let entry = unsafe { ash::Entry::load().unwrap() };
         let instance = unsafe {
             entry
                 .create_instance(&create_info, None)
@@ -65,6 +97,58 @@ impl VulkanApp {
             _entry: entry,
             instance,
         }
+    }
+
+    fn check_validation_layer_support(entry: &ash::Entry) -> bool {
+        // if support validation layer, then return true
+
+        let layer_properties = unsafe {
+            entry
+                .enumerate_instance_layer_properties()
+                .expect("Failed to enumerate Instance Layers Properties!")
+        };
+
+        if layer_properties.len() <= 0 {
+            eprintln!("No available layers.");
+            return false;
+        } else {
+            println!("Instance Available Layers: ");
+            for layer in layer_properties.iter() {
+                let layer_name = VulkanApp::vk_to_string(&layer.layer_name);
+                println!("\t{}", layer_name);
+            }
+        }
+
+        for required_layer_name in REQUIRED_VALIDATION_LAYERS.iter() {
+            let mut is_layer_found = false;
+
+            for layer_property in layer_properties.iter() {
+                let test_layer_name =
+                    VulkanApp::vk_to_string(&layer_property.layer_name);
+                if (*required_layer_name) == test_layer_name {
+                    is_layer_found = true;
+                    break;
+                }
+            }
+
+            if is_layer_found == false {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn vk_to_string(raw_string_array: &[c_char]) -> String {
+        let raw_string = unsafe {
+            let pointer = raw_string_array.as_ptr();
+            CStr::from_ptr(pointer)
+        };
+
+        raw_string
+            .to_str()
+            .expect("Failed to convert vulkan raw string.")
+            .to_owned()
     }
 }
 
