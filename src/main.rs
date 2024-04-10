@@ -1,20 +1,24 @@
-use ash::ext::debug_utils;
-use ash::khr::{surface, wayland_surface};
-use ash::vk::{
-    self, api_version_major, api_version_minor, api_version_patch,
-    make_api_version,
+use ash::{
+    ext::debug_utils,
+    khr::{surface, wayland_surface},
+    vk::{
+        self, api_version_major, api_version_minor, api_version_patch,
+        make_api_version,
+    },
 };
 use ash_window::create_surface;
-use std::ffi::{CStr, CString};
-use std::marker::PhantomData;
-use std::os::raw::{c_char, c_void};
-use std::ptr;
-use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
+    raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::WindowBuilder,
+};
+
+use std::{
+    ffi::{CStr, CString},
+    marker::PhantomData,
+    os::raw::{c_char, c_void},
+    ptr,
 };
 
 const APP_NAME: &'static str = "Playspawn";
