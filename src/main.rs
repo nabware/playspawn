@@ -4,10 +4,12 @@ use ash::vk::{
     self, api_version_major, api_version_minor, api_version_patch,
     make_api_version,
 };
+use ash_window::create_surface;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_void};
 use std::ptr;
+use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use winit::{
     event::{Event, WindowEvent},
@@ -26,11 +28,19 @@ const REQUIRED_VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 
 struct QueueFamilyIndices {
     graphics_family: Option<u32>,
+    present_family: Option<u32>,
 }
 
 impl QueueFamilyIndices {
+    pub fn new() -> QueueFamilyIndices {
+        QueueFamilyIndices {
+            graphics_family: None,
+            present_family: None,
+        }
+    }
+
     pub fn is_complete(&self) -> bool {
-        self.graphics_family.is_some()
+        self.graphics_family.is_some() && self.present_family.is_some()
     }
 }
 
@@ -40,10 +50,13 @@ struct VulkanApp {
     _physical_device: vk::PhysicalDevice,
     device: ash::Device, // Logical Device
     _graphics_queue: vk::Queue,
+    _surface: vk::SurfaceKHR,
+    _surface_instance: ash::khr::surface::Instance,
+    _present_queue: vk::Queue,
 }
 
 impl VulkanApp {
-    pub fn new() -> VulkanApp {
+    pub fn new(window: &winit::window::Window) -> VulkanApp {
         let entry = unsafe { ash::Entry::load().unwrap() };
 
         if ENABLE_VALIDATION_LAYERS
@@ -114,16 +127,47 @@ impl VulkanApp {
                 .create_instance(&create_info, None)
                 .expect("Failed to create instance!")
         };
-        let physical_device = VulkanApp::pick_physical_device(&instance);
-        let (logical_device, graphics_queue) =
-            VulkanApp::create_logical_device(&instance, physical_device);
+        let display_handle = window.display_handle().unwrap().as_raw();
+        let window_handle = window.window_handle().unwrap().as_raw();
+        let surface = unsafe {
+            create_surface(
+                &entry,
+                &instance,
+                display_handle,
+                window_handle,
+                None,
+            )
+            .unwrap()
+        };
+        let surface_instance =
+            ash::khr::surface::Instance::new(&entry, &instance);
+        let physical_device = VulkanApp::pick_physical_device(
+            &instance,
+            &surface_instance,
+            surface,
+        );
+        let (device, family_indices) = VulkanApp::create_logical_device(
+            &instance,
+            physical_device,
+            &surface_instance,
+            surface,
+        );
+        let graphics_queue = unsafe {
+            device.get_device_queue(family_indices.graphics_family.unwrap(), 0)
+        };
+        let present_queue = unsafe {
+            device.get_device_queue(family_indices.present_family.unwrap(), 0)
+        };
 
         VulkanApp {
             _entry: entry,
             instance,
             _physical_device: physical_device,
-            device: logical_device,
+            device,
             _graphics_queue: graphics_queue,
+            _surface: surface,
+            _surface_instance: surface_instance,
+            _present_queue: present_queue,
         }
     }
 
@@ -222,7 +266,11 @@ impl VulkanApp {
         vk::FALSE
     }
 
-    fn pick_physical_device(instance: &ash::Instance) -> vk::PhysicalDevice {
+    fn pick_physical_device(
+        instance: &ash::Instance,
+        surface_instance: &ash::khr::surface::Instance,
+        surface: vk::SurfaceKHR,
+    ) -> vk::PhysicalDevice {
         let physical_devices = unsafe {
             instance
                 .enumerate_physical_devices()
@@ -236,8 +284,12 @@ impl VulkanApp {
 
         let mut result = None;
         for &physical_device in physical_devices.iter() {
-            if VulkanApp::is_physical_device_suitable(instance, physical_device)
-            {
+            if VulkanApp::is_physical_device_suitable(
+                instance,
+                physical_device,
+                surface_instance,
+                surface,
+            ) {
                 if result.is_none() {
                     result = Some(physical_device)
                 }
@@ -253,6 +305,8 @@ impl VulkanApp {
     fn is_physical_device_suitable(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
+        surface_instance: &ash::khr::surface::Instance,
+        surface: vk::SurfaceKHR,
     ) -> bool {
         let device_properties =
             unsafe { instance.get_physical_device_properties(physical_device) };
@@ -344,7 +398,12 @@ impl VulkanApp {
             }
         );
 
-        let indices = VulkanApp::find_queue_family(instance, physical_device);
+        let indices = VulkanApp::find_queue_family(
+            instance,
+            physical_device,
+            surface_instance,
+            surface,
+        );
 
         return indices.is_complete();
     }
@@ -352,15 +411,15 @@ impl VulkanApp {
     fn find_queue_family(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
+        surface_instance: &ash::khr::surface::Instance,
+        surface: vk::SurfaceKHR,
     ) -> QueueFamilyIndices {
         let queue_families = unsafe {
             instance
                 .get_physical_device_queue_family_properties(physical_device)
         };
 
-        let mut queue_family_indices = QueueFamilyIndices {
-            graphics_family: None,
-        };
+        let mut queue_family_indices = QueueFamilyIndices::new();
 
         let mut index = 0;
         for queue_family in queue_families.iter() {
@@ -368,6 +427,19 @@ impl VulkanApp {
                 && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
             {
                 queue_family_indices.graphics_family = Some(index);
+            }
+
+            let is_present_support = unsafe {
+                surface_instance
+                    .get_physical_device_surface_support(
+                        physical_device,
+                        index as u32,
+                        surface,
+                    )
+                    .unwrap()
+            };
+            if queue_family.queue_count > 0 && is_present_support {
+                queue_family_indices.present_family = Some(index);
             }
 
             if queue_family_indices.is_complete() {
@@ -383,19 +455,35 @@ impl VulkanApp {
     fn create_logical_device(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
-    ) -> (ash::Device, vk::Queue) {
-        let indices = VulkanApp::find_queue_family(instance, physical_device);
+        surface_instance: &ash::khr::surface::Instance,
+        surface: vk::SurfaceKHR,
+    ) -> (ash::Device, QueueFamilyIndices) {
+        let indices = VulkanApp::find_queue_family(
+            instance,
+            physical_device,
+            surface_instance,
+            surface,
+        );
+
+        use std::collections::HashSet;
+        let mut unique_queue_families = HashSet::new();
+        unique_queue_families.insert(indices.graphics_family.unwrap());
+        unique_queue_families.insert(indices.present_family.unwrap());
 
         let queue_priorities = [1.0_f32];
-        let queue_create_info = vk::DeviceQueueCreateInfo {
-            s_type: vk::StructureType::DEVICE_QUEUE_CREATE_INFO,
-            p_next: ptr::null(),
-            flags: vk::DeviceQueueCreateFlags::empty(),
-            queue_family_index: indices.graphics_family.unwrap(),
-            p_queue_priorities: queue_priorities.as_ptr(),
-            queue_count: queue_priorities.len() as u32,
-            _marker: PhantomData,
-        };
+        let mut queue_create_infos = vec![];
+        for &queue_family in unique_queue_families.iter() {
+            let queue_create_info = vk::DeviceQueueCreateInfo {
+                s_type: vk::StructureType::DEVICE_QUEUE_CREATE_INFO,
+                p_next: ptr::null(),
+                flags: vk::DeviceQueueCreateFlags::empty(),
+                queue_family_index: queue_family,
+                p_queue_priorities: queue_priorities.as_ptr(),
+                queue_count: queue_priorities.len() as u32,
+                _marker: PhantomData,
+            };
+            queue_create_infos.push(queue_create_info);
+        }
 
         let physical_device_features = vk::PhysicalDeviceFeatures {
             ..Default::default() // default just enable no feature.
@@ -417,8 +505,8 @@ impl VulkanApp {
             s_type: vk::StructureType::DEVICE_CREATE_INFO,
             p_next: ptr::null(),
             flags: vk::DeviceCreateFlags::empty(),
-            queue_create_info_count: 1,
-            p_queue_create_infos: &queue_create_info,
+            queue_create_info_count: queue_create_infos.len() as u32,
+            p_queue_create_infos: queue_create_infos.as_ptr(),
             enabled_layer_count: if ENABLE_VALIDATION_LAYERS {
                 enable_layer_names.len()
             } else {
@@ -441,11 +529,7 @@ impl VulkanApp {
                 .expect("Failed to create logical Device!")
         };
 
-        let graphics_queue = unsafe {
-            device.get_device_queue(indices.graphics_family.unwrap(), 0)
-        };
-
-        (device, graphics_queue)
+        (device, indices)
     }
 }
 
@@ -459,9 +543,9 @@ impl Drop for VulkanApp {
 }
 
 fn main() {
-    let _vulkan_app = VulkanApp::new();
     let event_loop = EventLoop::new().unwrap();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let _vulkan_app = VulkanApp::new(&window);
 
     // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
     // dispatched any events. This is ideal for games and similar applications.
