@@ -63,10 +63,21 @@ struct VulkanApp {
 
 impl VulkanApp {
     pub fn new(window: &winit::window::Window) -> VulkanApp {
-        let entry = unsafe { Entry::load().unwrap() };
+        let entry = unsafe {
+            match Entry::load() {
+                Ok(entry) => entry,
+                Err(error) => panic!("{}", error),
+            }
+        };
 
-        let app_name = CString::new(APP_NAME).unwrap();
-        let engine_name = CString::new(format!("{APP_NAME} Engine")).unwrap();
+        let app_name = match CString::new(APP_NAME) {
+            Ok(app_name) => app_name,
+            Err(error) => panic!("{}", error),
+        };
+        let engine_name = match CString::new(format!("{APP_NAME} Engine")) {
+            Ok(engine_name) => engine_name,
+            Err(error) => panic!("{}", error),
+        };
 
         let app_info = vk::ApplicationInfo {
             s_type: vk::StructureType::APPLICATION_INFO,
