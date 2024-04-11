@@ -63,11 +63,6 @@ impl VulkanApp {
     pub fn new(window: &winit::window::Window) -> VulkanApp {
         let entry = unsafe { Entry::load().unwrap() };
 
-        #[cfg(debug_assertions)]
-        if !check_validation_layer_support(&entry) {
-            panic!("Validation layers requested, but not available.");
-        }
-
         let app_name = CString::new(APP_NAME).unwrap();
         let engine_name = CString::new(format!("{APP_NAME} Engine")).unwrap();
 
@@ -81,6 +76,38 @@ impl VulkanApp {
             api_version: VULKAN_VERSION,
             _marker: PhantomData,
         };
+
+        // Define required layers
+        #[cfg(debug_assertions)]
+        let required_layer_names: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
+        #[cfg(not(debug_assertions))]
+        let required_layer_names: [&str; 0] = [];
+
+        // Check layer support
+        let available_layers = unsafe {
+            match entry.enumerate_instance_layer_properties() {
+                Ok(available_layers) => available_layers,
+                Err(error) => panic!("{}", error),
+            }
+        };
+        for required_layer_name in required_layer_names {
+            let mut layer_found = false;
+            for available_layer in available_layers.iter() {
+                let available_layer_name = unsafe {
+                    match CStr::from_ptr(available_layer.layer_name.as_ptr()).to_str() {
+                        Ok(available_layer_name) => available_layer_name,
+                        Err(error) => panic!("{}", error),
+                    }
+                };
+                if required_layer_name == available_layer_name {
+                    layer_found = true;
+                    break;
+                };
+            }
+            if !layer_found {
+                panic!("Layer not supported: {}", required_layer_name);
+            };
+        }
 
         let raw_display_handle = window.display_handle().unwrap().as_raw();
 
@@ -545,32 +572,4 @@ fn main() {
             _ => (),
         }
     });
-}
-
-#[cfg(debug_assertions)]
-fn check_validation_layer_support(entry: &Entry) -> bool {
-    let available_layers = unsafe {
-        entry
-            .enumerate_instance_layer_properties()
-            .expect("Failed to enumerate instance layer properties.")
-    };
-    println!("Available layers: ");
-    for layer in available_layers.iter() {
-        let layer_name = VulkanApp::vk_to_string(&layer.layer_name);
-        println!("\t{}", layer_name);
-    }
-    for validation_layer_name in VALIDATION_LAYERS.iter() {
-        let mut layer_found = false;
-        for available_layer in available_layers.iter() {
-            let available_layer_name = VulkanApp::vk_to_string(&available_layer.layer_name);
-            if available_layer_name == (*validation_layer_name) {
-                layer_found = true;
-                break;
-            };
-        }
-        if !layer_found {
-            return false;
-        };
-    }
-    true
 }
