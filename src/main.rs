@@ -1,13 +1,12 @@
 use ash::{
     ext::debug_utils,
-    khr::{surface, wayland_surface},
     vk::{
         self, api_version_major, api_version_minor, api_version_patch,
         make_api_version,
     },
     Entry,
 };
-use ash_window::create_surface;
+use ash_window::{create_surface, enumerate_required_extensions};
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -86,11 +85,55 @@ impl VulkanApp {
             _marker: PhantomData,
         };
 
-        let extension_names = vec![
-            surface::NAME.as_ptr(),
-            wayland_surface::NAME.as_ptr(),
-            debug_utils::NAME.as_ptr(),
-        ];
+        let raw_display_handle = window.display_handle().unwrap().as_raw();
+
+        // Define required extensions
+        let required_extension_names =
+            match enumerate_required_extensions(raw_display_handle) {
+                Ok(required_extension_names) => required_extension_names,
+                Err(error) => panic!("{}", error),
+            };
+        #[cfg(debug_assertions)]
+        let required_extension_names =
+            [required_extension_names, &[debug_utils::NAME.as_ptr()]].concat();
+
+        // Check extension support
+        let available_extensions = unsafe {
+            match entry.enumerate_instance_extension_properties(None) {
+                Ok(available_extensions) => available_extensions,
+                Err(error) => panic!("{}", error),
+            }
+        };
+        for required_extension_name_ptr in required_extension_names.iter() {
+            let required_extension_name = unsafe {
+                match CStr::from_ptr(*required_extension_name_ptr).to_str() {
+                    Ok(required_extension_name) => required_extension_name,
+                    Err(error) => panic!("{}", error),
+                }
+            };
+            let mut extension_found = false;
+            for available_extension in available_extensions.iter() {
+                let available_extension_name = unsafe {
+                    match CStr::from_ptr(
+                        available_extension.extension_name.as_ptr(),
+                    )
+                    .to_str()
+                    {
+                        Ok(available_extension_name) => {
+                            available_extension_name
+                        }
+                        Err(error) => panic!("{}", error),
+                    }
+                };
+                if required_extension_name == available_extension_name {
+                    extension_found = true;
+                    break;
+                };
+            }
+            if !extension_found {
+                panic!("Extension not supported: {}", required_extension_name);
+            };
+        }
 
         let required_validation_layer_raw_names: Vec<CString> =
             VALIDATION_LAYERS
@@ -124,8 +167,8 @@ impl VulkanApp {
             } else {
                 0
             } as u32,
-            pp_enabled_extension_names: extension_names.as_ptr(),
-            enabled_extension_count: extension_names.len() as u32,
+            pp_enabled_extension_names: required_extension_names.as_ptr(),
+            enabled_extension_count: required_extension_names.len() as u32,
             _marker: PhantomData,
         };
 
@@ -134,13 +177,12 @@ impl VulkanApp {
                 .create_instance(&create_info, None)
                 .expect("Failed to create instance!")
         };
-        let display_handle = window.display_handle().unwrap().as_raw();
         let window_handle = window.window_handle().unwrap().as_raw();
         let surface = unsafe {
             create_surface(
                 &entry,
                 &instance,
-                display_handle,
+                raw_display_handle,
                 window_handle,
                 None,
             )
