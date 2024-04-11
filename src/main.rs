@@ -29,6 +29,8 @@ const ENABLE_VALIDATION_LAYERS: bool = true;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 #[cfg(not(debug_assertions))]
 const VALIDATION_LAYERS: [&str; 0] = [];
+const VALIDATION_LAYER_NAME: &CStr =
+    unsafe { CStr::from_bytes_with_nul_unchecked(b"VK_LAYER_KHRONOS_validation\0") };
 
 struct QueueFamilyIndices {
     graphics_family: Option<u32>,
@@ -79,9 +81,9 @@ impl VulkanApp {
 
         // Define required layers
         #[cfg(debug_assertions)]
-        let required_layer_names: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
+        let required_layer_names: [*const i8; 1] = [VALIDATION_LAYER_NAME.as_ptr()];
         #[cfg(not(debug_assertions))]
-        let required_layer_names: [&str; 0] = [];
+        let required_layer_names: [*const i8; 0] = [];
 
         // Check layer support
         let available_layers = unsafe {
@@ -90,7 +92,13 @@ impl VulkanApp {
                 Err(error) => panic!("{}", error),
             }
         };
-        for required_layer_name in required_layer_names {
+        for required_layer_name_ptr in required_layer_names {
+            let required_layer_name = unsafe {
+                match CStr::from_ptr(required_layer_name_ptr).to_str() {
+                    Ok(required_layer_name) => required_layer_name,
+                    Err(error) => panic!("{}", error),
+                }
+            };
             let mut layer_found = false;
             for available_layer in available_layers.iter() {
                 let available_layer_name = unsafe {
@@ -152,15 +160,6 @@ impl VulkanApp {
             };
         }
 
-        let required_validation_layer_raw_names: Vec<CString> = VALIDATION_LAYERS
-            .iter()
-            .map(|layer_name| CString::new(*layer_name).unwrap())
-            .collect();
-        let enable_layer_names: Vec<*const i8> = required_validation_layer_raw_names
-            .iter()
-            .map(|layer_name| layer_name.as_ptr())
-            .collect();
-
         let create_info = vk::InstanceCreateInfo {
             s_type: vk::StructureType::INSTANCE_CREATE_INFO,
             p_next: if ENABLE_VALIDATION_LAYERS {
@@ -171,16 +170,8 @@ impl VulkanApp {
             },
             flags: vk::InstanceCreateFlags::empty(),
             p_application_info: &app_info,
-            pp_enabled_layer_names: if ENABLE_VALIDATION_LAYERS {
-                enable_layer_names.as_ptr()
-            } else {
-                ptr::null()
-            },
-            enabled_layer_count: if ENABLE_VALIDATION_LAYERS {
-                enable_layer_names.len()
-            } else {
-                0
-            } as u32,
+            pp_enabled_layer_names: required_layer_names.as_ptr(),
+            enabled_layer_count: required_layer_names.len() as u32,
             pp_enabled_extension_names: required_extension_names.as_ptr(),
             enabled_extension_count: required_extension_names.len() as u32,
             _marker: PhantomData,
