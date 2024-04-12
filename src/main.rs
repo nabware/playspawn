@@ -196,6 +196,7 @@ impl VulkanApp {
         #[cfg(not(debug_assertions))]
         let debug_utils_messenger_create_info_ptr = ptr::null();
 
+        // Create vulkan instance
         let create_info = vk::InstanceCreateInfo {
             s_type: vk::StructureType::INSTANCE_CREATE_INFO,
             p_next: debug_utils_messenger_create_info_ptr,
@@ -207,11 +208,11 @@ impl VulkanApp {
             enabled_extension_count: required_extension_names.len() as u32,
             _marker: PhantomData,
         };
-
         let instance = unsafe {
-            entry
-                .create_instance(&create_info, None)
-                .expect("Failed to create instance!")
+            match entry.create_instance(&create_info, None) {
+                Ok(instance) => instance,
+                Err(error) => panic!("{}", error),
+            }
         };
 
         // Create debug utils messenger for everything else
