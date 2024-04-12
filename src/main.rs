@@ -173,7 +173,7 @@ impl VulkanApp {
             };
         }
 
-        // Create debug utils messenger for instance creation and destruction
+        // Create info for debug utils messenger
         #[cfg(debug_assertions)]
         let debug_utils_messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
             s_type: vk::StructureType::DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
@@ -188,6 +188,8 @@ impl VulkanApp {
             p_user_data: ptr::null_mut(),
             _marker: PhantomData,
         };
+
+        // Create debug utils messenger for instance creation and destruction
         #[cfg(debug_assertions)]
         let debug_utils_messenger_create_info_ptr =
             &debug_utils_messenger_create_info as *const _ as *const c_void;
@@ -212,7 +214,7 @@ impl VulkanApp {
                 .expect("Failed to create instance!")
         };
 
-        // Create debug utils messenger
+        // Create debug utils messenger for everything else
         let debug_utils = ash::ext::debug_utils::Instance::new(&entry, &instance);
         let debug_utils_messenger = unsafe {
             debug_utils
