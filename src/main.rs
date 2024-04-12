@@ -221,9 +221,11 @@ impl VulkanApp {
         // Create debug utils messenger for everything else
         let debug_utils = ash::ext::debug_utils::Instance::new(&entry, &instance);
         let debug_utils_messenger = unsafe {
-            debug_utils
-                .create_debug_utils_messenger(&debug_utils_messenger_create_info, None)
-                .unwrap()
+            match debug_utils.create_debug_utils_messenger(&debug_utils_messenger_create_info, None)
+            {
+                Ok(debug_utils_messenger) => debug_utils_messenger,
+                Err(error) => panic!("{}", error),
+            }
         };
 
         // Select a physical device with a queue that supports graphics, preferably a discrete GPU
