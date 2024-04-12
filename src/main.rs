@@ -171,14 +171,27 @@ impl VulkanApp {
             };
         }
 
+        // Create debug utils messenger for instance creation and destruction
+        #[cfg(debug_assertions)]
+        let debug_utils_messenger_create_info = &(vk::DebugUtilsMessengerCreateInfoEXT {
+            s_type: vk::StructureType::DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+            p_next: ptr::null(),
+            flags: vk::DebugUtilsMessengerCreateFlagsEXT::empty(),
+            message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
+            message_type: vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
+                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
+            pfn_user_callback: Some(debug_utils_messenger_callback),
+            p_user_data: ptr::null_mut(),
+            _marker: PhantomData,
+        }) as *const _ as *const c_void;
+        #[cfg(not(debug_assertions))]
+        let debug_utils_messenger_create_info = ptr::null();
+
         let create_info = vk::InstanceCreateInfo {
             s_type: vk::StructureType::INSTANCE_CREATE_INFO,
-            p_next: if ENABLE_VALIDATION_LAYERS {
-                &VulkanApp::debug_utils_create_info() as *const vk::DebugUtilsMessengerCreateInfoEXT
-                    as *const c_void
-            } else {
-                ptr::null()
-            },
+            p_next: debug_utils_messenger_create_info,
             flags: vk::InstanceCreateFlags::empty(),
             p_application_info: &app_info,
             pp_enabled_layer_names: required_layer_names.as_ptr(),
@@ -233,48 +246,6 @@ impl VulkanApp {
             .to_str()
             .expect("Failed to convert vulkan raw string.")
             .to_owned()
-    }
-
-    fn debug_utils_create_info<'a>() -> vk::DebugUtilsMessengerCreateInfoEXT<'a> {
-        vk::DebugUtilsMessengerCreateInfoEXT {
-            s_type: vk::StructureType::DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-            p_next: ptr::null(),
-            flags: vk::DebugUtilsMessengerCreateFlagsEXT::empty(),
-            message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
-            message_type: vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
-                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
-            pfn_user_callback: Some(VulkanApp::vulkan_debug_utils_callback),
-            p_user_data: ptr::null_mut(),
-            _marker: PhantomData,
-        }
-    }
-
-    // Callback function used in Debug Utils.
-    unsafe extern "system" fn vulkan_debug_utils_callback(
-        message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
-        message_type: vk::DebugUtilsMessageTypeFlagsEXT,
-        p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
-        _p_user_data: *mut c_void,
-    ) -> vk::Bool32 {
-        let severity = match message_severity {
-            vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => "[Verbose]",
-            vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => "[Warning]",
-            vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => "[Error]",
-            vk::DebugUtilsMessageSeverityFlagsEXT::INFO => "[Info]",
-            _ => "[Unknown]",
-        };
-        let types = match message_type {
-            vk::DebugUtilsMessageTypeFlagsEXT::GENERAL => "[General]",
-            vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE => "[Performance]",
-            vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION => "[Validation]",
-            _ => "[Unknown]",
-        };
-        let message = CStr::from_ptr((*p_callback_data).p_message);
-        println!("[Debug]{}{}{:?}", severity, types, message);
-
-        vk::FALSE
     }
 
     fn pick_physical_device(
@@ -574,4 +545,29 @@ fn main() {
             _ => (),
         }
     });
+}
+
+unsafe extern "system" fn debug_utils_messenger_callback(
+    message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
+    message_type: vk::DebugUtilsMessageTypeFlagsEXT,
+    p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
+    _p_user_data: *mut c_void,
+) -> vk::Bool32 {
+    let severity = match message_severity {
+        vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => "[Verbose]",
+        vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => "[Warning]",
+        vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => "[Error]",
+        vk::DebugUtilsMessageSeverityFlagsEXT::INFO => "[Info]",
+        _ => "[Unknown]",
+    };
+    let types = match message_type {
+        vk::DebugUtilsMessageTypeFlagsEXT::GENERAL => "[General]",
+        vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE => "[Performance]",
+        vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION => "[Validation]",
+        _ => "[Unknown]",
+    };
+    let message = CStr::from_ptr((*p_callback_data).p_message);
+    println!("[Debug]{}{}{:?}", severity, types, message);
+
+    vk::FALSE
 }
