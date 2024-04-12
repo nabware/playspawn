@@ -73,21 +73,23 @@ impl VulkanApp {
             }
         };
 
-        let app_name = match CString::new(APP_NAME) {
+        // Create app info
+        let app_name_ptr = match CString::new(APP_NAME) {
             Ok(app_name) => app_name,
             Err(error) => panic!("{}", error),
-        };
-        let engine_name = match CString::new(format!("{APP_NAME} Engine")) {
+        }
+        .as_ptr();
+        let engine_name_ptr = match CString::new(format!("{APP_NAME} Engine")) {
             Ok(engine_name) => engine_name,
             Err(error) => panic!("{}", error),
-        };
-
+        }
+        .as_ptr();
         let app_info = vk::ApplicationInfo {
             s_type: vk::StructureType::APPLICATION_INFO,
             p_next: ptr::null(),
-            p_application_name: app_name.as_ptr(),
+            p_application_name: app_name_ptr,
             application_version: APP_VERSION,
-            p_engine_name: engine_name.as_ptr(),
+            p_engine_name: engine_name_ptr,
             engine_version: APP_VERSION,
             api_version: VULKAN_VERSION,
             _marker: PhantomData,
