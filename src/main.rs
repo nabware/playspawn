@@ -226,6 +226,38 @@ impl VulkanApp {
                 .unwrap()
         };
 
+        // Select a physical device with a queue that supports graphics, preferably a discrete GPU
+        let mut selected_physical_device = None;
+        let available_physical_devices = unsafe {
+            match instance.enumerate_physical_devices() {
+                Ok(physical_devices) => physical_devices,
+                Err(error) => panic!("{}", error),
+            }
+        };
+        for available_physical_device in available_physical_devices {
+            let queue_families = unsafe {
+                instance.get_physical_device_queue_family_properties(available_physical_device)
+            };
+            for queue_family in queue_families {
+                if queue_family.queue_count > 0
+                    && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+                {
+                    selected_physical_device = Some(available_physical_device);
+                    break;
+                }
+            }
+            let device_properties =
+                unsafe { instance.get_physical_device_properties(available_physical_device) };
+            if selected_physical_device.is_some()
+                && device_properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU
+            {
+                break;
+            }
+        }
+        if selected_physical_device == None {
+            panic!("Failed to find physical device that supports graphics.");
+        }
+
         let window_handle = window.window_handle().unwrap().as_raw();
         let surface = unsafe {
             create_surface(&entry, &instance, raw_display_handle, window_handle, None).unwrap()
