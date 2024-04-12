@@ -65,6 +65,7 @@ struct VulkanApp {
 
 impl VulkanApp {
     pub fn new(window: &winit::window::Window) -> VulkanApp {
+        // Load vulkan functions
         let entry = unsafe {
             match Entry::load() {
                 Ok(entry) => entry,
