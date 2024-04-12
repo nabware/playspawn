@@ -53,6 +53,8 @@ impl QueueFamilyIndices {
 struct VulkanApp {
     _entry: ash::Entry,
     instance: ash::Instance,
+    debug_utils: ash::ext::debug_utils::Instance,
+    debug_utils_messenger: ash::vk::DebugUtilsMessengerEXT,
     _physical_device: vk::PhysicalDevice,
     device: ash::Device, // Logical Device
     _graphics_queue: vk::Queue,
@@ -173,7 +175,7 @@ impl VulkanApp {
 
         // Create debug utils messenger for instance creation and destruction
         #[cfg(debug_assertions)]
-        let debug_utils_messenger_create_info = &(vk::DebugUtilsMessengerCreateInfoEXT {
+        let debug_utils_messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
             s_type: vk::StructureType::DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
             p_next: ptr::null(),
             flags: vk::DebugUtilsMessengerCreateFlagsEXT::empty(),
@@ -185,13 +187,16 @@ impl VulkanApp {
             pfn_user_callback: Some(debug_utils_messenger_callback),
             p_user_data: ptr::null_mut(),
             _marker: PhantomData,
-        }) as *const _ as *const c_void;
+        };
+        #[cfg(debug_assertions)]
+        let debug_utils_messenger_create_info_ptr =
+            &debug_utils_messenger_create_info as *const _ as *const c_void;
         #[cfg(not(debug_assertions))]
-        let debug_utils_messenger_create_info = ptr::null();
+        let debug_utils_messenger_create_info_ptr = ptr::null();
 
         let create_info = vk::InstanceCreateInfo {
             s_type: vk::StructureType::INSTANCE_CREATE_INFO,
-            p_next: debug_utils_messenger_create_info,
+            p_next: debug_utils_messenger_create_info_ptr,
             flags: vk::InstanceCreateFlags::empty(),
             p_application_info: &app_info,
             pp_enabled_layer_names: required_layer_names.as_ptr(),
@@ -206,6 +211,15 @@ impl VulkanApp {
                 .create_instance(&create_info, None)
                 .expect("Failed to create instance!")
         };
+
+        // Create debug utils messenger
+        let debug_utils = ash::ext::debug_utils::Instance::new(&entry, &instance);
+        let debug_utils_messenger = unsafe {
+            debug_utils
+                .create_debug_utils_messenger(&debug_utils_messenger_create_info, None)
+                .unwrap()
+        };
+
         let window_handle = window.window_handle().unwrap().as_raw();
         let surface = unsafe {
             create_surface(&entry, &instance, raw_display_handle, window_handle, None).unwrap()
@@ -227,6 +241,8 @@ impl VulkanApp {
         VulkanApp {
             _entry: entry,
             instance,
+            debug_utils,
+            debug_utils_messenger,
             _physical_device: physical_device,
             device,
             _graphics_queue: graphics_queue,
@@ -490,6 +506,9 @@ impl VulkanApp {
 impl Drop for VulkanApp {
     fn drop(&mut self) {
         unsafe {
+            #[cfg(debug_assertions)]
+            self.debug_utils
+                .destroy_debug_utils_messenger(self.debug_utils_messenger, None);
             self.device.destroy_device(None);
             self.instance.destroy_instance(None);
         }
