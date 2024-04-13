@@ -177,8 +177,10 @@ fn main() {
         }
     };
 
-    // Create debug utils messenger for everything else
+    // Create debug utils messenger
+    #[cfg(debug_assertions)]
     let debug_utils = ash::ext::debug_utils::Instance::new(&entry, &instance);
+    #[cfg(debug_assertions)]
     let debug_utils_messenger = unsafe {
         match debug_utils.create_debug_utils_messenger(&debug_utils_messenger_create_info, None) {
             Ok(debug_utils_messenger) => debug_utils_messenger,
