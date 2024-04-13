@@ -288,6 +288,7 @@ fn main() {
     }
 }
 
+#[cfg(debug_assertions)]
 unsafe extern "system" fn debug_utils_messenger_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     message_type: vk::DebugUtilsMessageTypeFlagsEXT,
