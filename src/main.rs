@@ -4,7 +4,11 @@ use ash::{
     Entry,
 };
 use ash_window::enumerate_required_extensions;
-use winit::{event_loop::EventLoop, raw_window_handle::HasDisplayHandle, window::WindowBuilder};
+use winit::{
+    event_loop::EventLoop,
+    raw_window_handle::{HasDisplayHandle, HasWindowHandle},
+    window::WindowBuilder,
+};
 
 use std::{
     collections::HashSet,
@@ -188,7 +192,27 @@ fn main() {
         }
     };
 
-    // Select physical device and queue family that supports graphics, preferably a discrete GPU
+    // Create surface
+    let raw_window_handle = match window.window_handle() {
+        Ok(window_handle) => window_handle.as_raw(),
+        Err(error) => panic!("{}", error),
+    };
+    let surface = unsafe {
+        match ash_window::create_surface(
+            &entry,
+            &instance,
+            raw_display_handle,
+            raw_window_handle,
+            None,
+        ) {
+            Ok(surface) => surface,
+            Err(error) => panic!("{}", error),
+        }
+    };
+    let surface_functions = ash::khr::surface::Instance::new(&entry, &instance);
+
+    // Select physical device and queue families that support graphics and presentation,
+    // preferably a discrete GPU
     let mut selected_physical_device = None;
     let mut selected_queue_family_indices = HashSet::new();
     let available_physical_devices = unsafe {
@@ -199,6 +223,7 @@ fn main() {
     };
     for available_physical_device in available_physical_devices {
         let mut graphics_queue_family_index = None;
+        let mut presentation_queue_family_index = None;
         let queue_families = unsafe {
             instance.get_physical_device_queue_family_properties(available_physical_device)
         };
@@ -215,16 +240,33 @@ fn main() {
             if queue_flags.contains(vk::QueueFlags::GRAPHICS) {
                 graphics_queue_family_index = Some(current_queue_family_index);
             }
+            if unsafe {
+                match surface_functions.get_physical_device_surface_support(
+                    available_physical_device,
+                    current_queue_family_index,
+                    surface,
+                ) {
+                    Ok(has_present_support) => has_present_support,
+                    Err(error) => panic!("{}", error),
+                }
+            } {
+                presentation_queue_family_index = Some(current_queue_family_index);
+            }
             current_queue_family_index += 1;
         }
-        if graphics_queue_family_index.is_some() {
+        if graphics_queue_family_index.is_some() && presentation_queue_family_index.is_some() {
             selected_physical_device = Some(available_physical_device);
             let graphics_queue_family_index = match graphics_queue_family_index {
                 Some(graphics_queue_family_index) => graphics_queue_family_index,
                 None => panic!("Missing graphics queue family index."),
             };
+            let presentation_queue_family_index = match presentation_queue_family_index {
+                Some(presentation_queue_family_index) => presentation_queue_family_index,
+                None => panic!("Missing presentation queue family index."),
+            };
             selected_queue_family_indices.clear();
             selected_queue_family_indices.insert(graphics_queue_family_index);
+            selected_queue_family_indices.insert(presentation_queue_family_index);
             // Stop looking if this is a discrete GPU
             let vk::PhysicalDeviceProperties { device_type, .. } =
                 unsafe { instance.get_physical_device_properties(available_physical_device) };
@@ -281,6 +323,7 @@ fn main() {
 
     // Cleanup
     unsafe {
+        surface_functions.destroy_surface(surface, None);
         #[cfg(debug_assertions)]
         debug_utils.destroy_debug_utils_messenger(debug_utils_messenger, None);
         device.destroy_device(None);
