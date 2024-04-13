@@ -25,8 +25,14 @@ const VALIDATION_LAYER_NAME: &CStr =
     unsafe { CStr::from_bytes_with_nul_unchecked(b"VK_LAYER_KHRONOS_validation\0") };
 
 fn main() {
-    let event_loop = EventLoop::new().unwrap();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let event_loop = match EventLoop::new() {
+        Ok(event_loop) => event_loop,
+        Err(error) => panic!("{}", error),
+    };
+    let window = match WindowBuilder::new().build(&event_loop) {
+        Ok(window) => window,
+        Err(error) => panic!("{}", error),
+    };
 
     // Load vulkan functions
     let entry = unsafe {
@@ -96,7 +102,10 @@ fn main() {
         };
     }
 
-    let raw_display_handle = window.display_handle().unwrap().as_raw();
+    let raw_display_handle = match window.display_handle() {
+        Ok(display_handle) => display_handle.as_raw(),
+        Err(error) => panic!("{}", error),
+    };
 
     // Define required extensions
     let required_extension_names = match enumerate_required_extensions(raw_display_handle) {
