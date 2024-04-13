@@ -323,10 +323,10 @@ fn main() {
 
     // Cleanup
     unsafe {
+        device.destroy_device(None);
         surface_functions.destroy_surface(surface, None);
         #[cfg(debug_assertions)]
         debug_utils.destroy_debug_utils_messenger(debug_utils_messenger, None);
-        device.destroy_device(None);
         instance.destroy_instance(None);
     }
 }
