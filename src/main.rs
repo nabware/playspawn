@@ -1,15 +1,16 @@
 use ash::{
     ext::debug_utils,
-    vk::{self, make_api_version},
+    vk::{self, make_api_version, SurfaceCapabilitiesKHR, SurfaceFormatKHR},
     Entry,
 };
-use ash_window::enumerate_required_extensions;
+use num::clamp;
 use winit::{
     event_loop::EventLoop,
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::WindowBuilder,
 };
 
+use core::panic;
 use std::{
     collections::HashSet,
     ffi::{CStr, CString},
@@ -64,41 +65,31 @@ fn main() {
         _marker: PhantomData,
     };
 
-    // Define required layers
+    // Define required instance layers
     #[cfg(debug_assertions)]
-    let required_layer_names: [*const i8; 1] = [VALIDATION_LAYER_NAME.as_ptr()];
+    let required_instance_layer_names = [VALIDATION_LAYER_NAME.as_ptr()];
     #[cfg(not(debug_assertions))]
-    let required_layer_names: [*const i8; 0] = [];
+    let required_instance_layer_names = [];
 
-    // Check layer support
+    // Check instance layer support
     let available_layers = unsafe {
         match entry.enumerate_instance_layer_properties() {
             Ok(available_layers) => available_layers,
             Err(error) => panic!("{}", error),
         }
     };
-    for required_layer_name_ptr in required_layer_names {
-        let required_layer_name = unsafe {
-            match CStr::from_ptr(required_layer_name_ptr).to_str() {
-                Ok(required_layer_name) => required_layer_name,
-                Err(error) => panic!("{}", error),
-            }
-        };
+    for required_name_ptr in required_instance_layer_names {
+        let required_name_cstr = unsafe { CStr::from_ptr(required_name_ptr) };
         let mut layer_found = false;
-        for available_layer in available_layers.iter() {
-            let available_layer_name = unsafe {
-                match CStr::from_ptr(available_layer.layer_name.as_ptr()).to_str() {
-                    Ok(available_layer_name) => available_layer_name,
-                    Err(error) => panic!("{}", error),
-                }
-            };
-            if required_layer_name == available_layer_name {
+        for vk::LayerProperties { layer_name, .. } in available_layers.iter() {
+            let available_name_cstr = unsafe { CStr::from_ptr(layer_name.as_ptr()) };
+            if required_name_cstr == available_name_cstr {
                 layer_found = true;
                 break;
             };
         }
         if !layer_found {
-            panic!("Layer not supported: {}", required_layer_name);
+            panic!("Instance layer not supported: {:?}", required_name_cstr);
         };
     }
 
@@ -107,44 +98,34 @@ fn main() {
         Err(error) => panic!("{}", error),
     };
 
-    // Define required extensions
-    let required_extension_names = match enumerate_required_extensions(raw_display_handle) {
-        Ok(required_extension_names) => required_extension_names,
-        Err(error) => panic!("{}", error),
-    };
+    // Define required instance extensions
+    let mut required_instance_extension_names =
+        match ash_window::enumerate_required_extensions(raw_display_handle) {
+            Ok(v) => v.to_vec(),
+            Err(e) => panic!("{}", e),
+        };
     #[cfg(debug_assertions)]
-    let required_extension_names =
-        [required_extension_names, &[debug_utils::NAME.as_ptr()]].concat();
+    required_instance_extension_names.push(debug_utils::NAME.as_ptr());
 
-    // Check extension support
-    let available_extensions = unsafe {
+    // Check instance extension support
+    let available_instance_extensions = unsafe {
         match entry.enumerate_instance_extension_properties(None) {
-            Ok(available_extensions) => available_extensions,
-            Err(error) => panic!("{}", error),
+            Ok(v) => v,
+            Err(e) => panic!("{}", e),
         }
     };
-    for required_extension_name_ptr in required_extension_names.iter() {
-        let required_extension_name = unsafe {
-            match CStr::from_ptr(*required_extension_name_ptr).to_str() {
-                Ok(required_extension_name) => required_extension_name,
-                Err(error) => panic!("{}", error),
-            }
-        };
+    for required_name_ptr in required_instance_extension_names.iter() {
+        let required_name_cstr = unsafe { CStr::from_ptr(*required_name_ptr) };
         let mut extension_found = false;
-        for available_extension in available_extensions.iter() {
-            let available_extension_name = unsafe {
-                match CStr::from_ptr(available_extension.extension_name.as_ptr()).to_str() {
-                    Ok(available_extension_name) => available_extension_name,
-                    Err(error) => panic!("{}", error),
-                }
-            };
-            if required_extension_name == available_extension_name {
+        for vk::ExtensionProperties { extension_name, .. } in available_instance_extensions.iter() {
+            let available_name_cstr = unsafe { CStr::from_ptr(extension_name.as_ptr()) };
+            if required_name_cstr == available_name_cstr {
                 extension_found = true;
                 break;
             };
         }
         if !extension_found {
-            panic!("Extension not supported: {}", required_extension_name);
+            panic!("Instance extension not supported: {:?}", required_name_cstr);
         };
     }
 
@@ -177,10 +158,10 @@ fn main() {
         p_next: debug_utils_messenger_create_info_ptr,
         flags: vk::InstanceCreateFlags::empty(),
         p_application_info: &app_info,
-        pp_enabled_layer_names: required_layer_names.as_ptr(),
-        enabled_layer_count: required_layer_names.len() as u32,
-        pp_enabled_extension_names: required_extension_names.as_ptr(),
-        enabled_extension_count: required_extension_names.len() as u32,
+        pp_enabled_layer_names: required_instance_layer_names.as_ptr(),
+        enabled_layer_count: required_instance_layer_names.len() as u32,
+        pp_enabled_extension_names: required_instance_extension_names.as_ptr(),
+        enabled_extension_count: required_instance_extension_names.len() as u32,
         _marker: PhantomData,
     };
     let instance = unsafe {
@@ -220,17 +201,70 @@ fn main() {
     };
     let surface_functions = ash::khr::surface::Instance::new(&entry, &instance);
 
-    // Select physical device and queue families that support graphics and presentation,
-    // preferably a discrete GPU
+    // Select physical device that supports device extensions
+    // and queue families that support graphics and presentation,
+    // preferably a discrete GPU.
     let mut selected_physical_device = None;
     let mut selected_queue_family_indices = HashSet::new();
+    let mut selected_graphics_queue_family_index = None;
+    let mut selected_present_queue_family_index = None;
+    // Define required device extensions
+    let required_device_extension_names = [ash::khr::swapchain::NAME.as_ptr()];
+    let mut selected_surface_formats = vec![];
+    let mut selected_present_modes = vec![];
     let available_physical_devices = unsafe {
         match instance.enumerate_physical_devices() {
-            Ok(physical_devices) => physical_devices,
-            Err(error) => panic!("{}", error),
+            Ok(v) => v,
+            Err(e) => panic!("{}", e),
         }
     };
     for available_physical_device in available_physical_devices {
+        // Check device extension support
+        let available_device_extensions = unsafe {
+            match instance.enumerate_device_extension_properties(available_physical_device) {
+                Ok(available_device_extensions) => available_device_extensions,
+                Err(error) => panic!("{}", error),
+            }
+        };
+        for required_name_ptr in required_device_extension_names {
+            let required_name_cstr = unsafe { CStr::from_ptr(required_name_ptr) };
+            let mut extension_found = false;
+            for vk::ExtensionProperties { extension_name, .. } in available_device_extensions.iter()
+            {
+                let available_name_cstr = unsafe { CStr::from_ptr(extension_name.as_ptr()) };
+                if required_name_cstr == available_name_cstr {
+                    extension_found = true;
+                    break;
+                }
+            }
+            if !extension_found {
+                continue;
+            }
+        }
+        // Check swapchain support
+        let surface_formats = unsafe {
+            match surface_functions
+                .get_physical_device_surface_formats(available_physical_device, surface)
+            {
+                Ok(v) => v,
+                Err(e) => panic!("{}", e),
+            }
+        };
+        if surface_formats.len() == 0 {
+            continue;
+        }
+        let present_modes = unsafe {
+            match surface_functions
+                .get_physical_device_surface_present_modes(available_physical_device, surface)
+            {
+                Ok(v) => v,
+                Err(e) => panic!("{}", e),
+            }
+        };
+        if present_modes.len() == 0 {
+            continue;
+        }
+        // Check graphics and presentation support
         let mut graphics_queue_family_index = None;
         let mut presentation_queue_family_index = None;
         let queue_families = unsafe {
@@ -246,9 +280,11 @@ fn main() {
             if queue_count == 0 {
                 continue;
             }
+            // Check for graphics support
             if queue_flags.contains(vk::QueueFlags::GRAPHICS) {
                 graphics_queue_family_index = Some(current_queue_family_index);
             }
+            // Check for presentation support
             if unsafe {
                 match surface_functions.get_physical_device_surface_support(
                     available_physical_device,
@@ -276,6 +312,10 @@ fn main() {
             selected_queue_family_indices.clear();
             selected_queue_family_indices.insert(graphics_queue_family_index);
             selected_queue_family_indices.insert(presentation_queue_family_index);
+            selected_surface_formats = surface_formats;
+            selected_present_modes = present_modes;
+            selected_graphics_queue_family_index = Some(graphics_queue_family_index);
+            selected_present_queue_family_index = Some(presentation_queue_family_index);
             // Stop looking if this is a discrete GPU
             let vk::PhysicalDeviceProperties { device_type, .. } =
                 unsafe { instance.get_physical_device_properties(available_physical_device) };
@@ -292,12 +332,12 @@ fn main() {
     // Queue create infos and device features
     let queue_priorities = [1.0_f32];
     let mut queue_create_infos = vec![];
-    for queue_family_index in selected_queue_family_indices {
+    for queue_family_index in selected_queue_family_indices.iter() {
         let queue_create_info = vk::DeviceQueueCreateInfo {
             s_type: vk::StructureType::DEVICE_QUEUE_CREATE_INFO,
             p_next: ptr::null(),
             flags: vk::DeviceQueueCreateFlags::empty(),
-            queue_family_index,
+            queue_family_index: *queue_family_index,
             p_queue_priorities: queue_priorities.as_ptr(),
             queue_count: queue_priorities.len() as u32,
             _marker: PhantomData,
@@ -316,10 +356,10 @@ fn main() {
         flags: vk::DeviceCreateFlags::empty(),
         queue_create_info_count: queue_create_infos.len() as u32,
         p_queue_create_infos: queue_create_infos.as_ptr(),
-        enabled_layer_count: required_layer_names.len() as u32,
-        pp_enabled_layer_names: required_layer_names.as_ptr(),
-        enabled_extension_count: 0,
-        pp_enabled_extension_names: ptr::null(),
+        enabled_layer_count: required_instance_layer_names.len() as u32,
+        pp_enabled_layer_names: required_instance_layer_names.as_ptr(),
+        enabled_extension_count: required_device_extension_names.len() as u32,
+        pp_enabled_extension_names: required_device_extension_names.as_ptr(),
         p_enabled_features: &physical_device_features,
         _marker: PhantomData,
     };
@@ -330,8 +370,91 @@ fn main() {
         }
     };
 
+    let SurfaceCapabilitiesKHR {
+        min_image_count,
+        current_transform,
+        min_image_extent,
+        max_image_extent,
+        ..
+    } = unsafe {
+        match surface_functions
+            .get_physical_device_surface_capabilities(selected_physical_device, surface)
+        {
+            Ok(v) => v,
+            Err(e) => panic!("{}", e),
+        }
+    };
+    let SurfaceFormatKHR {
+        format,
+        color_space,
+    } = selected_surface_formats[0];
+    let (image_sharing_mode, queue_family_index_count, queue_family_indices) =
+        if selected_queue_family_indices.len() > 1 {
+            (
+                vk::SharingMode::CONCURRENT,
+                2,
+                vec![
+                    match selected_graphics_queue_family_index {
+                        Some(v) => v,
+                        None => panic!("Missing graphics queue family index."),
+                    },
+                    match selected_present_queue_family_index {
+                        Some(v) => v,
+                        None => panic!("Missing present queue family index."),
+                    },
+                ],
+            )
+        } else {
+            (vk::SharingMode::EXCLUSIVE, 0, vec![])
+        };
+    let present_mode = selected_present_modes[0];
+    let window_size = window.inner_size();
+    let extent = vk::Extent2D {
+        width: clamp(
+            window_size.width,
+            min_image_extent.width,
+            max_image_extent.width,
+        ),
+        height: clamp(
+            window_size.height,
+            min_image_extent.height,
+            max_image_extent.height,
+        ),
+    };
+
+    // Create swapchain
+    let swapchain_create_info = vk::SwapchainCreateInfoKHR {
+        s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
+        p_next: ptr::null(),
+        flags: vk::SwapchainCreateFlagsKHR::empty(),
+        surface,
+        min_image_count: min_image_count + 1,
+        image_color_space: color_space,
+        image_format: format,
+        image_extent: extent,
+        image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
+        image_sharing_mode,
+        p_queue_family_indices: queue_family_indices.as_ptr(),
+        queue_family_index_count,
+        pre_transform: current_transform,
+        composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+        present_mode,
+        clipped: vk::TRUE,
+        old_swapchain: vk::SwapchainKHR::null(),
+        image_array_layers: 1,
+        _marker: PhantomData,
+    };
+    let swapchain_functions = ash::khr::swapchain::Device::new(&instance, &device);
+    let swapchain = unsafe {
+        match swapchain_functions.create_swapchain(&swapchain_create_info, None) {
+            Ok(v) => v,
+            Err(e) => panic!("{}", e),
+        }
+    };
+
     // Cleanup
     unsafe {
+        swapchain_functions.destroy_swapchain(swapchain, None);
         device.destroy_device(None);
         surface_functions.destroy_surface(surface, None);
         #[cfg(debug_assertions)]
