@@ -129,6 +129,33 @@ fn main() {
         };
     }
 
+    // Create debug utrils messenger callback
+    #[cfg(debug_assertions)]
+    unsafe extern "system" fn debug_utils_messenger_callback(
+        message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
+        message_type: vk::DebugUtilsMessageTypeFlagsEXT,
+        p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
+        _p_user_data: *mut c_void,
+    ) -> vk::Bool32 {
+        let severity = match message_severity {
+            vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => "[Verbose]",
+            vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => "[Warning]",
+            vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => "[Error]",
+            vk::DebugUtilsMessageSeverityFlagsEXT::INFO => "[Info]",
+            _ => "[Unknown]",
+        };
+        let types = match message_type {
+            vk::DebugUtilsMessageTypeFlagsEXT::GENERAL => "[General]",
+            vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE => "[Performance]",
+            vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION => "[Validation]",
+            _ => "[Unknown]",
+        };
+        let message = CStr::from_ptr((*p_callback_data).p_message);
+        println!("[Debug]{}{}{:?}", severity, types, message);
+
+        vk::FALSE
+    }
+
     // Create info for debug utils messenger
     #[cfg(debug_assertions)]
     let debug_utils_messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
@@ -461,30 +488,4 @@ fn main() {
         debug_utils.destroy_debug_utils_messenger(debug_utils_messenger, None);
         instance.destroy_instance(None);
     }
-}
-
-#[cfg(debug_assertions)]
-unsafe extern "system" fn debug_utils_messenger_callback(
-    message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
-    message_type: vk::DebugUtilsMessageTypeFlagsEXT,
-    p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
-    _p_user_data: *mut c_void,
-) -> vk::Bool32 {
-    let severity = match message_severity {
-        vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => "[Verbose]",
-        vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => "[Warning]",
-        vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => "[Error]",
-        vk::DebugUtilsMessageSeverityFlagsEXT::INFO => "[Info]",
-        _ => "[Unknown]",
-    };
-    let types = match message_type {
-        vk::DebugUtilsMessageTypeFlagsEXT::GENERAL => "[General]",
-        vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE => "[Performance]",
-        vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION => "[Validation]",
-        _ => "[Unknown]",
-    };
-    let message = CStr::from_ptr((*p_callback_data).p_message);
-    println!("[Debug]{}{}{:?}", severity, types, message);
-
-    vk::FALSE
 }
