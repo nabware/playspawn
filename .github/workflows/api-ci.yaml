@@ -10,8 +10,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    name: Run tests and check formatting
+  api_test:
+    name: API Test
     runs-on: ubuntu-latest
     defaults:
       run:
