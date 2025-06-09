@@ -5,8 +5,8 @@
 ### Autoscaling virtual machines
 
 - Web client
-- API server
-- WebSocket server
+- Web API
+- Game API
 
 ### Managed services
 
