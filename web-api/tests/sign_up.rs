@@ -1,6 +1,6 @@
 use actix_web::{App, test};
 
-use api::config;
+use web_api::config;
 
 #[actix_web::test]
 async fn successful_sign_up() {

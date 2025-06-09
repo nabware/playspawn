@@ -1,21 +1,18 @@
-name: API CI
+name: Web API
 
 on:
-  push:
-    paths:
-      - "api/**"
   pull_request:
     paths:
-      - "api/**"
+      - "web-api/**"
   workflow_dispatch:
 
 jobs:
-  api_tests:
-    name: API Tests
+  web_api_tests:
+    name: Web API Tests
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: api
+        working-directory: web-api
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1

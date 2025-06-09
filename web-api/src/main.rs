@@ -1,6 +1,6 @@
 use actix_web::{App, HttpServer};
 
-use api::config;
+use web_api::config;
 
 #[cfg(not(tarpaulin_include))]
 #[actix_web::main]
