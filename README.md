@@ -54,36 +54,25 @@
 - created_at
 - updated_at
 
-### Group
+### Game
 
 - id
-- owner_user_id
 - name
 - created_at
 - updated_at
 
-### GroupMembership
+### GameSession
 
 - id
-- group_id
-- user_id
+- game_id
 - created_at
 - updated_at
 
-### GroupInvitation
+### GameSessionMember
 
 - id
-- group_id
-- token
-- expires_at
-- created_at
-- updated_at
-
-### GroupMessage
-
-- id
-- group_id
+- session_id
 - user_id
-- content
+- is_winner
 - created_at
 - updated_at
