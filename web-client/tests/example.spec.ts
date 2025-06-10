@@ -5,5 +5,5 @@ test('access to web api', async ({ page, request }) => {
   expect(response.status()).toBe(200);
 
   const body = await response.text();
-  expect(body).toBe("Welcome");
+  expect(body).toBe("Welcome!");
 });
