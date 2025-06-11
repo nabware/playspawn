@@ -1,6 +1,6 @@
 # Playspawn
 
-![Web API Tests](https://github.com/nabware/playspawn/actions/workflows/web-api.yml/badge.svg?branch=main)
+[![Web API](https://github.com/nabware/playspawn/actions/workflows/web-api.yaml/badge.svg)](https://github.com/nabware/playspawn/actions/workflows/web-api.yaml)
 
 [![Game API](https://github.com/nabware/playspawn/actions/workflows/game-api.yaml/badge.svg)](https://github.com/nabware/playspawn/actions/workflows/game-api.yaml)
 
