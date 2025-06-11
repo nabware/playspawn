@@ -14,6 +14,18 @@ until curl -s http://localhost:8080 >/dev/null; do
   sleep 1
 done
 
+# Start the Game API server
+echo "Starting Game API server..."
+cd ../game-api
+cargo run &
+GAME_API_PID=$!
+
+# Wait for the Game API to be ready
+echo "Waiting for Game API to be ready..."
+until curl -s http://localhost:5001 >/dev/null; do
+  sleep 1
+done
+
 case $MODE in
 dev | "")
   echo "Running dev server..."
@@ -29,6 +41,9 @@ test)
   echo "Invalid mode: '$MODE'"
   ;;
 esac
+
+echo "Stopping Game API..."
+kill $GAME_API_PID
 
 echo "Stopping Web API..."
 kill $WEB_API_PID
