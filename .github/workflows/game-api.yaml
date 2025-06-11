@@ -1,0 +1,21 @@
+name: Game API
+
+on:
+  pull_request:
+    paths:
+      - "game-api/**"
+  workflow_dispatch:
+
+jobs:
+  web_api_tests:
+    name: Game API Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: game-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo install cargo-tarpaulin
+      - run: cargo tarpaulin --fail-under 100
+      - run: cargo fmt --all -- --check
