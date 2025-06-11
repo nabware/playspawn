@@ -1,0 +1,24 @@
+name: Web Client
+
+on:
+  pull_request:
+    paths:
+      - "web-client/**"
+  workflow_dispatch:
+
+jobs:
+  web_client_tests:
+    name: Web Client Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: npm ci
+      - run: npx playwright install
+      - run: ./run.sh test
