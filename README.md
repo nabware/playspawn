@@ -1,5 +1,11 @@
 # Playspawn
 
+![Web API Tests](https://github.com/nabware/playspawn/actions/workflows/web-api.yml/badge.svg?branch=main)
+
+![Game API Tests](https://github.com/nabware/playspawn/actions/workflows/game-api.yml/badge.svg?branch=main)
+
+![Web Client Tests](https://github.com/nabware/playspawn/actions/workflows/web-client.yml/badge.svg?branch=main)
+
 ## Architecture
 
 ### Autoscaling virtual machines
