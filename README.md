@@ -1,10 +1,8 @@
 # Playspawn
 
 [![Web API](https://github.com/nabware/playspawn/actions/workflows/web-api.yaml/badge.svg)](https://github.com/nabware/playspawn/actions/workflows/web-api.yaml)
-
 [![Game API](https://github.com/nabware/playspawn/actions/workflows/game-api.yaml/badge.svg)](https://github.com/nabware/playspawn/actions/workflows/game-api.yaml)
-
-![Web Client Tests](https://github.com/nabware/playspawn/actions/workflows/web-client.yml/badge.svg?branch=main)
+[![Web Client](https://github.com/nabware/playspawn/actions/workflows/web-client.yaml/badge.svg)](https://github.com/nabware/playspawn/actions/workflows/web-client.yaml)
 
 ## Architecture
 
