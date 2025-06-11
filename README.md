@@ -2,7 +2,7 @@
 
 ![Web API Tests](https://github.com/nabware/playspawn/actions/workflows/web-api.yml/badge.svg?branch=main)
 
-![Game API Tests](https://github.com/nabware/playspawn/actions/workflows/game-api.yml/badge.svg?branch=main)
+[![Game API](https://github.com/nabware/playspawn/actions/workflows/game-api.yaml/badge.svg)](https://github.com/nabware/playspawn/actions/workflows/game-api.yaml)
 
 ![Web Client Tests](https://github.com/nabware/playspawn/actions/workflows/web-client.yml/badge.svg?branch=main)
 
