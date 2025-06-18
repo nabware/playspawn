@@ -19,6 +19,67 @@
 
 ## Data models
 
+### ServiceHealthLog
+
+- id
+- service_name
+- target_request_latency
+- average_request_latency
+- requests_per_second
+- current_instance_count
+- created_at
+- updated_at
+
+### ServiceScalingEvent
+
+- id
+- service_name
+- requested_instance_delta
+- started_at
+- ended_at
+- created_at
+- updated_at
+
+### InstanceHealthLog
+
+- id
+- instance_id
+- instance_type
+- service_name
+- average_request_latency
+- requests_per_second
+- requests_in_progress
+- current_connection_count
+- cpu_util
+- ram_used
+- ram_total
+- network_in
+- network_out
+- disk_read
+- disk_write
+- disk_used
+- disk_total
+- created_at
+- updated_at
+
+### ServiceRequestLog
+
+- id
+- service_name
+- started_at
+- ended_at
+- latency
+- protocol
+- method
+- path
+- type
+- status_code
+- context
+- instance_id
+- user_id
+- created_at
+- updated_at
+
 ### User
 
 - id
